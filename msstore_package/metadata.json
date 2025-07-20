@@ -1,0 +1,15 @@
+{
+  "name": "QR Reader Pro",
+  "version": "1.0.0",
+  "description": "Professional QR code scanner for Windows",
+  "author": "Your Company",
+  "category": "Productivity",
+  "price": "Free",
+  "features": [
+    "Fast QR code scanning",
+    "System tray integration",
+    "Hotkey support (Q+R)",
+    "Automatic clipboard copy",
+    "Professional detection algorithms"
+  ]
+}
