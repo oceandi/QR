@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"math"
 	"os"
 	"os/exec"
 
@@ -63,32 +64,359 @@ func (qs *QRScanner) scanImageFile(imagePath string) (string, error) {
 		return "", fmt.Errorf("failed to decode image: %v", err)
 	}
 
-	// FIRST: Try grid-based scanning like Python version
-	result, err := qs.gridBasedScan(img)
+	// PROFESSIONAL PIPELINE for field work
+	fmt.Println("🔬 Starting professional QR detection pipeline...")
+	
+	// Stage 1: Multi-scale detection (for small QRs)
+	result, err := qs.multiScaleDetection(img)
 	if err == nil && result != "" {
+		fmt.Println("✅ Found with multi-scale detection")
 		return result, nil
 	}
 
-	// Try multiple scanning approaches for better detection
-	approaches := []func(image.Image) (string, error){
-		qs.scanDirect,           // Direct scan
-		qs.scanWithGrayscale,    // Grayscale conversion
-		qs.scanWithContrast,     // Enhanced contrast
-		qs.scanWithCV2Advanced,  // OpenCV advanced preprocessing
-		qs.scanWithBlur,         // Slight blur to reduce noise
-		qs.scanInverted,         // Inverted colors
-		qs.scanWithBinarization, // Black/white binarization
+	// Stage 2: ROI-based smart detection 
+	result, err = qs.smartROIDetection(img)
+	if err == nil && result != "" {
+		fmt.Println("✅ Found with ROI detection")
+		return result, nil
 	}
 
-	for i, approach := range approaches {
-		result, err := approach(img)
-		if err == nil && result != "" {
-			fmt.Printf("✅ QR found with approach %d\n", i+1)
-			return result, nil
+	// Stage 3: Enhanced preprocessing for blurry images
+	result, err = qs.enhancedPreprocessingPipeline(img)
+	if err == nil && result != "" {
+		fmt.Println("✅ Found with enhanced preprocessing")
+		return result, nil
+	}
+
+	// Stage 4: Fallback to grid scan
+	result, err = qs.gridBasedScan(img)
+	if err == nil && result != "" {
+		fmt.Println("✅ Found with grid scan")
+		return result, nil
+	}
+
+	return "", fmt.Errorf("professional pipeline failed - QR may be too degraded")
+}
+
+// STAGE 1: Multi-scale detection for small QRs
+func (qs *QRScanner) multiScaleDetection(img image.Image) (string, error) {
+	bounds := img.Bounds()
+	
+	// Try different scales - crucial for small QRs
+	scales := []float64{1.0, 1.5, 2.0, 2.5, 3.0, 0.75, 0.5}
+	
+	for _, scale := range scales {
+		if scale == 1.0 {
+			// Try original size first
+			result, err := qs.scanDirect(img)
+			if err == nil && result != "" {
+				return result, nil
+			}
+		} else {
+			// Scale image
+			newWidth := int(float64(bounds.Dx()) * scale)
+			newHeight := int(float64(bounds.Dy()) * scale)
+			
+			if newWidth > 50 && newHeight > 50 && newWidth < 5000 && newHeight < 5000 {
+				scaled := qs.scaleImage(img, newWidth, newHeight)
+				result, err := qs.scanDirect(scaled)
+				if err == nil && result != "" {
+					fmt.Printf("🔍 QR found at scale %.1fx\n", scale)
+					return result, nil
+				}
+			}
 		}
 	}
+	
+	return "", fmt.Errorf("no QR found at any scale")
+}
 
-	return "", fmt.Errorf("no QR code found with any approach")
+// STAGE 2: Smart ROI detection - find QR regions automatically
+func (qs *QRScanner) smartROIDetection(img image.Image) (string, error) {
+	bounds := img.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+	
+	// Define smart regions based on common QR positions
+	regions := []struct {
+		name string
+		x, y, w, h int
+	}{
+		// Center regions (most common)
+		{"center", width/4, height/4, width/2, height/2},
+		{"center-large", width/6, height/6, 2*width/3, 2*height/3},
+		
+		// Corner regions
+		{"top-left", 0, 0, width/2, height/2},
+		{"top-right", width/2, 0, width/2, height/2},
+		{"bottom-left", 0, height/2, width/2, height/2},
+		{"bottom-right", width/2, height/2, width/2, height/2},
+		
+		// Edge centers
+		{"top-center", width/4, 0, width/2, height/3},
+		{"bottom-center", width/4, 2*height/3, width/2, height/3},
+		{"left-center", 0, height/4, width/3, height/2},
+		{"right-center", 2*width/3, height/4, width/3, height/2},
+	}
+	
+	for _, region := range regions {
+		if region.x >= 0 && region.y >= 0 && 
+		   region.x+region.w <= width && region.y+region.h <= height {
+			
+			roi := cropImage(img, region.x, region.y, region.x+region.w, region.y+region.h)
+			if roi != nil {
+				// Try multiple approaches on this ROI
+				approaches := []func(image.Image) (string, error){
+					qs.scanDirect,
+					qs.scanWithContrast,
+					qs.scanWithCV2Advanced,
+					qs.scanWithBinarization,
+				}
+				
+				for _, approach := range approaches {
+					result, err := approach(roi)
+					if err == nil && result != "" {
+						fmt.Printf("🎯 QR found in %s region\n", region.name)
+						return result, nil
+					}
+				}
+			}
+		}
+	}
+	
+	return "", fmt.Errorf("no QR found in smart ROI regions")
+}
+
+// STAGE 3: Enhanced preprocessing pipeline for blurry/poor quality images
+func (qs *QRScanner) enhancedPreprocessingPipeline(img image.Image) (string, error) {
+	// Chain of enhancements specifically for field photos
+	enhancements := []struct {
+		name string
+		process func(image.Image) image.Image
+	}{
+		{"unsharp-mask", qs.applyUnsharpMask},
+		{"gamma-correction", qs.applyGammaCorrection},
+		{"clahe-contrast", qs.applyCLAHE},
+		{"noise-reduction", qs.applyNoiseReduction},
+		{"edge-enhancement", qs.applyEdgeEnhancement},
+	}
+	
+	// Try each enhancement
+	for _, enhancement := range enhancements {
+		enhanced := enhancement.process(img)
+		
+		// Try multiple detection methods on enhanced image
+		methods := []func(image.Image) (string, error){
+			qs.scanDirect,
+			qs.scanWithCV2Advanced,
+			qs.scanWithBinarization,
+		}
+		
+		for _, method := range methods {
+			result, err := method(enhanced)
+			if err == nil && result != "" {
+				fmt.Printf("✨ QR found with %s enhancement\n", enhancement.name)
+				return result, nil
+			}
+		}
+	}
+	
+	return "", fmt.Errorf("no QR found with enhanced preprocessing")
+}
+
+// Image scaling utility
+func (qs *QRScanner) scaleImage(img image.Image, newWidth, newHeight int) image.Image {
+	bounds := img.Bounds()
+	oldWidth := bounds.Dx()
+	oldHeight := bounds.Dy()
+	
+	scaled := image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
+	
+	// Simple nearest neighbor scaling
+	for y := 0; y < newHeight; y++ {
+		for x := 0; x < newWidth; x++ {
+			srcX := x * oldWidth / newWidth
+			srcY := y * oldHeight / newHeight
+			
+			if srcX < oldWidth && srcY < oldHeight {
+				color := img.At(bounds.Min.X+srcX, bounds.Min.Y+srcY)
+				scaled.Set(x, y, color)
+			}
+		}
+	}
+	
+	return scaled
+}
+
+// Unsharp mask for sharpening blurry images
+func (qs *QRScanner) applyUnsharpMask(img image.Image) image.Image {
+	bounds := img.Bounds()
+	result := image.NewRGBA(bounds)
+	
+	// Simple unsharp mask implementation
+	for y := bounds.Min.Y + 1; y < bounds.Max.Y - 1; y++ {
+		for x := bounds.Min.X + 1; x < bounds.Max.X - 1; x++ {
+			// Get surrounding pixels
+			center := img.At(x, y)
+			cr, cg, cb, ca := center.RGBA()
+			
+			// Calculate average of surrounding pixels (blur)
+			var avgR, avgG, avgB uint32
+			count := 0
+			for dy := -1; dy <= 1; dy++ {
+				for dx := -1; dx <= 1; dx++ {
+					if dx != 0 || dy != 0 {
+						r, g, b, _ := img.At(x+dx, y+dy).RGBA()
+						avgR += r
+						avgG += g
+						avgB += b
+						count++
+					}
+				}
+			}
+			avgR /= uint32(count)
+			avgG /= uint32(count)
+			avgB /= uint32(count)
+			
+			// Enhance difference from blur
+			factor := 1.5
+			newR := cr + uint32(factor * float64(int32(cr) - int32(avgR)))
+			newG := cg + uint32(factor * float64(int32(cg) - int32(avgG)))
+			newB := cb + uint32(factor * float64(int32(cb) - int32(avgB)))
+			
+			// Clamp values
+			if newR > 65535 { newR = 65535 }
+			if newG > 65535 { newG = 65535 }
+			if newB > 65535 { newB = 65535 }
+			
+			result.Set(x, y, color.RGBA{uint8(newR >> 8), uint8(newG >> 8), uint8(newB >> 8), uint8(ca >> 8)})
+		}
+	}
+	
+	return result
+}
+
+// Gamma correction for exposure issues
+func (qs *QRScanner) applyGammaCorrection(img image.Image) image.Image {
+	bounds := img.Bounds()
+	result := image.NewRGBA(bounds)
+	
+	gamma := 1.2 // Slight gamma boost
+	
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			
+			// Apply gamma correction
+			newR := uint32(65535 * math.Pow(float64(r)/65535, 1.0/gamma))
+			newG := uint32(65535 * math.Pow(float64(g)/65535, 1.0/gamma))
+			newB := uint32(65535 * math.Pow(float64(b)/65535, 1.0/gamma))
+			
+			result.Set(x, y, color.RGBA{uint8(newR >> 8), uint8(newG >> 8), uint8(newB >> 8), uint8(a >> 8)})
+		}
+	}
+	
+	return result
+}
+
+// CLAHE-like contrast enhancement
+func (qs *QRScanner) applyCLAHE(img image.Image) image.Image {
+	bounds := img.Bounds()
+	enhanced := image.NewRGBA(bounds)
+	
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			// Enhance contrast
+			r = enhanceContrast(r)
+			g = enhanceContrast(g)
+			b = enhanceContrast(b)
+			enhanced.Set(x, y, color.RGBA{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8), uint8(a >> 8)})
+		}
+	}
+	
+	return enhanced
+}
+
+// Noise reduction
+func (qs *QRScanner) applyNoiseReduction(img image.Image) image.Image {
+	bounds := img.Bounds()
+	blurred := image.NewRGBA(bounds)
+	
+	for y := bounds.Min.Y + 1; y < bounds.Max.Y - 1; y++ {
+		for x := bounds.Min.X + 1; x < bounds.Max.X - 1; x++ {
+			// Simple 3x3 blur kernel
+			var r, g, b, a uint32
+			for dy := -1; dy <= 1; dy++ {
+				for dx := -1; dx <= 1; dx++ {
+					pr, pg, pb, pa := img.At(x+dx, y+dy).RGBA()
+					r += pr
+					g += pg
+					b += pb
+					a += pa
+				}
+			}
+			r /= 9
+			g /= 9
+			b /= 9
+			a /= 9
+			blurred.Set(x, y, color.RGBA{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8), uint8(a >> 8)})
+		}
+	}
+	
+	return blurred
+}
+
+// Edge enhancement 
+func (qs *QRScanner) applyEdgeEnhancement(img image.Image) image.Image {
+	bounds := img.Bounds()
+	result := image.NewRGBA(bounds)
+	
+	// Simple edge enhancement using sobel-like filter
+	for y := bounds.Min.Y + 1; y < bounds.Max.Y - 1; y++ {
+		for x := bounds.Min.X + 1; x < bounds.Max.X - 1; x++ {
+			// Get grayscale values around pixel
+			var gx, gy float64
+			
+			// Sobel X
+			gx += -1 * float64(grayValue(img.At(x-1, y-1)))
+			gx += -2 * float64(grayValue(img.At(x-1, y)))
+			gx += -1 * float64(grayValue(img.At(x-1, y+1)))
+			gx += 1 * float64(grayValue(img.At(x+1, y-1)))
+			gx += 2 * float64(grayValue(img.At(x+1, y)))
+			gx += 1 * float64(grayValue(img.At(x+1, y+1)))
+			
+			// Sobel Y  
+			gy += -1 * float64(grayValue(img.At(x-1, y-1)))
+			gy += -2 * float64(grayValue(img.At(x, y-1)))
+			gy += -1 * float64(grayValue(img.At(x+1, y-1)))
+			gy += 1 * float64(grayValue(img.At(x-1, y+1)))
+			gy += 2 * float64(grayValue(img.At(x, y+1)))
+			gy += 1 * float64(grayValue(img.At(x+1, y+1)))
+			
+			// Calculate magnitude
+			magnitude := math.Sqrt(gx*gx + gy*gy)
+			edgeVal := uint8(math.Min(255, magnitude))
+			
+			// Combine with original
+			origR, origG, origB, origA := img.At(x, y).RGBA()
+			enhanceR := uint8((origR>>8) + uint32(edgeVal)/4)
+			enhanceG := uint8((origG>>8) + uint32(edgeVal)/4)  
+			enhanceB := uint8((origB>>8) + uint32(edgeVal)/4)
+			
+			result.Set(x, y, color.RGBA{enhanceR, enhanceG, enhanceB, uint8(origA >> 8)})
+		}
+	}
+	
+	return result
+}
+
+// Helper function to get grayscale value
+func grayValue(c color.Color) uint8 {
+	r, g, b, _ := c.RGBA()
+	// Standard luminance formula
+	gray := (299*r + 587*g + 114*b + 500) / 1000
+	return uint8(gray >> 8)
 }
 
 // Grid-based scanning like Python version (THE KEY!)
