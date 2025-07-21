@@ -1,7 +1,7 @@
 @echo off
 echo Building Microsoft Store package...
 
-set SDK_PATH="C:\Program Files (x86)\Windows Kits\10\bin\10.0.22000.0\x64"
+set SDK_PATH="C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64"
 if not exist %SDK_PATH% (
     echo Error: Windows 10 SDK not found
     echo Please install Windows 10 SDK from Visual Studio Installer
