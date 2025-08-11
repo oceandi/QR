@@ -1,0 +1,40 @@
+UnivacAI.QRMacros
+QR Macros
+CN=D15C8374-FC52-4893-A37A-50A71B738B38
+UnivacAI
+1.0.4.0
+QR Macro System
+
+
+
+
+<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10" xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities" IgnorableNamespaces="uap uap10 rescap">
+  <Identity Name="UnivacAI.QRMacros" Publisher="CN=D15C8374-FC52-4893-A37A-50A71B738B38" Version="1.0.3.0" ProcessorArchitecture="x64" />
+  <Properties>
+    <DisplayName>QR Macros</DisplayName>
+    <PublisherDisplayName>UnivacAI</PublisherDisplayName>
+    <Description>QR Macro System</Description>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <uap10:PackageIntegrity>
+      <uap10:Content Enforcement="on" />
+    </uap10:PackageIntegrity>
+  </Properties>
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22000.1" />
+    <PackageDependency Name="Microsoft.VCLibs.140.00.UWPDesktop" MinVersion="14.0.24217.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+  </Dependencies>
+  <Applications>
+    <Application Id="QRMacro" Executable="QRMacro.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="QR Macros" Description="QR Macro System" BackgroundColor="transparent" Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>
